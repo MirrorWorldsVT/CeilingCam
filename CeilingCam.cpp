@@ -14,7 +14,6 @@
 //	A higher EPSILON will not improve accuracy, and will waste processing cycles
 //	REMEMBER: This is in pixels, NOT in feet!
 #define EPSILON 0.1 //Minimum deviation from 0
-#define M_PI 3.14159265
 
 using namespace std;
 
