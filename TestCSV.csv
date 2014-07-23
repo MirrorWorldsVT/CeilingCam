@@ -1,0 +1,2 @@
+Camera Number,Address,Height,Width,Center x,Center y,Radius,Position x,Position y,Position z,Ceiling Height,Info
+1,http://username:password@192.168.1.11/video.cgi?camera=25.mjpg,1920,1080,720,540,600,12.5,9.5,8.125,8.5,Test Camera
