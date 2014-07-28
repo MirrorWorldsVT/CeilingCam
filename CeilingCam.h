@@ -16,7 +16,7 @@ class CeilingCam {
 	//FIELDS
 	int d_number;
 	int d_xo, d_yo, d_radius, d_height, d_width;
-	double d_x, d_y, d_z;
+	double d_x, d_y, d_z, d_rotation;
 	double d_ceiling;
 	std::string d_address;
 	std::string d_info;
@@ -25,7 +25,6 @@ class CeilingCam {
 	int ToInt ( std::string &Text );
 	double ToDbl ( std::string &Text );
 	double findTheta( double x, double y );
-
 
 public:
 	//CONSTRUCTORS
@@ -43,6 +42,11 @@ public:
 	std::vector<double> toCartesian(double blobX, double blobY);
 											//Get position of blob in Cartesian world coordinates
 
+	//TEST FUNCTIONS
+	void testGetters(CeilingCam testObject);
+	void testInitialization();
+	void testTheta(CeilingCam testObject);
+	void testCartesian(CeilingCam testObject);
 };
 
 #endif /* CEILINGCAM_H_ */

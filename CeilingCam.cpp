@@ -7,23 +7,32 @@
 
 #include "CeilingCam.h"
 #include <string>
-#include <iostream>
 #include <sstream>
 #include <cmath>
+
 //	EPSILON should be set to a realistic tolerance for the system according to camera resolution
 //	A higher EPSILON will not improve accuracy, and will waste processing cycles
 //	REMEMBER: This is in pixels, NOT in feet!
 #define EPSILON 0.1 //Minimum deviation from 0
 
+#define M_PI 3.14159265//Remove for Linux compilation
+
+#include <iostream>
+// uncomment to disable assert()
+// #define NDEBUG
+#include <cassert>
+
 using namespace std;
+
+
 
 //CONSTRUCTORS		//////////////////////////////////////
 
 /*
  * Read in string and initialize camera object
  * PARAM:		String formatted as follows:
- * 					Camera Number,Address,Height,Width,Center x,Center y,Radius,
- * 					(cont'd) Position x,Position y,Position z,Ceiling Height,Info
+ * 					Camera Number,Address,Width,Height,Rotation,Center x,Center y,Radius,
+ * 					(cont'd) Position x,Position y,Position z,,Ceiling Height,Info
  * RETURN:		Initialized CeilingCam object
  */
 CeilingCam::CeilingCam(std::string input) {
@@ -45,6 +54,9 @@ CeilingCam::CeilingCam(std::string input) {
 	//Height
 	getline(stream, buf, ',');
 	d_height = ToInt(buf);
+	//Rotation
+	getline(stream, buf, ',');
+	d_rotation = ToDbl(buf);
 
 	//Center
 	//xo
@@ -83,6 +95,8 @@ CeilingCam::CeilingCam(std::string input) {
  */
 CeilingCam::~CeilingCam() {}
 
+
+
 //MEMBER FUNCTIONS	//////////////////////////////////////
 
 /*
@@ -104,10 +118,12 @@ void CeilingCam::print(){
 	std::cout << d_x << ", " << d_y << ", " << d_z << "\n";
 	std::cout << "Ceiling Height: " << d_ceiling << "\n";
 	std::cout << "Image Size: " << d_width << " x " << d_height << "\n";
+	std::cout << "Camera Rotated by " << d_rotation << " degrees\n";
 	std::cout << "Center: (" << d_xo << ", " << d_yo << ")\n";
 	std::cout << "Radius: " << d_radius << "\n";
 	std::cout << "Feed: " << d_address << "\n";
 }
+
 /*
  * Convert from blob position to world position
  * PARAM: 	Coordinates formatted as follows
@@ -118,16 +134,14 @@ void CeilingCam::print(){
  */
 vector<double> CeilingCam::toCartesian(double blobX, double blobY){
 	//initialize
-	vector<double> cartesian = {d_x,d_y,d_z};
-	//Correct for optical center
-	double offsetX = d_xo - (d_width / 2.0);
-	double offsetY = d_yo - (d_height / 2.0);
-	blobX += offsetX;
-	blobY += offsetY;
-	//TODO: Implement camera rotation correction
+	vector<double> cartesian = {d_x,d_y,d_z-d_ceiling};
+	//cout << "(" << cartesian[0] << ", " << cartesian[1] << ", " << cartesian[2] << ")\n";
+	//Move origin to optical center
+	blobX -= d_xo;
+	blobY -= d_yo;
 	//Convert blob position to image polar coordinates (d, theta)
 	//  A.	Find distance between blob and center (d)
-	int distance = hypot(blobX, blobY);
+	double distance = hypot(fabs(blobX), fabs(blobY));
 
 	//	B.	Infinity Cases
 
@@ -147,20 +161,30 @@ vector<double> CeilingCam::toCartesian(double blobX, double blobY){
 	//  C.	Find angle between blob and x axis (theta)
 	double theta = findTheta(blobX, blobY);
 
-	//	D.	Calculate actual distance
+	//	D.	Compensate for camera rotation
+	theta -= d_rotation / 180 * M_PI;
+
+	//	E.	Calculate actual distance
 
 	//		(The diameter of the camera corresponds to pi rad of worldview
 	//		The angle "phi" between the vertical and the blob is:
-	double phi = (distance / d_radius) * (M_PI / 2);
+	double phi = (distance / (float)d_radius) * (M_PI / 2.0);
+	//cout << "Phi: " << phi << "\n";
 
-	//		Phi can then be used along with d_height to find the actual distance with
-	distance = d_height * tan(phi);
+	//		Phi can then be used along with the distance to the floor to find the actual distance
+	distance = d_ceiling * tan(phi);
+	//cout << "Distance: " << distance << "\n";
 
-	//	E.	Convert back to Cartesian (this time with distance corrected)
-	cartesian[0] = distance * cos(theta);
-	cartesian[1] = distance * sin(theta);
+	//	F.	Convert back to Cartesian (this time with distance corrected)
+	//		Note that this is added to the world coordinates
+	cartesian[0] += distance * cos(theta);
+	cartesian[1] += distance * sin(theta);
+	//cout << "(" << cartesian[0] << ", " << cartesian[1] << ", " << cartesian[2] << ")\n\n";
 	return cartesian;
 }
+
+
+
 //	GETTERS		//////////////////////////////////////
 
 /*
@@ -194,9 +218,106 @@ std::vector<double> CeilingCam::position(){
 
 //TEST FUNCTIONS	//////////////////////////////////////
 int main(){
-	string testString = "1,http://username:password@192.168.1.11/video.cgi?camera=25.mjpg,1920,1080,720,540,600,12.5,9.5,8.125,8.5,Test Camera";
+	string testString = "1,http://username:password@192.168.1.11/video.cgi?camera=25.mjpg,1920,1080,90,720,500,600,12.5,9.5,8.75,8.5,Test Camera";
 	CeilingCam test(testString);
+	test.testInitialization();
+	cout << "Initialization Success\n";
+	test.testGetters(test);
+	cout << "Getters Success\n";
+	test.testTheta(test);
+	cout << "Theta Success\n";
+	test.testCartesian(test);
+	cout << "Cartesian Success\n";
 }
+
+void CeilingCam::testInitialization(){
+	assert(d_number==1);
+	assert(d_address=="http://username:password@192.168.1.11/video.cgi?camera=25.mjpg");
+	assert(d_width==1920);
+	assert(d_height==1080);
+	assert(d_rotation==90);
+	assert(d_xo==720);
+	assert(d_yo==500);
+	assert(d_radius==600);
+	assert(d_x==12.5);
+	assert(d_y==9.5);
+	assert(d_z==8.75);
+	assert(d_ceiling==8.5);
+	assert(d_info=="Test Camera");
+}
+
+void CeilingCam::testGetters(CeilingCam testObject){
+	vector<int> testVector = testObject.center();
+	assert(testVector[0]==720);
+	assert(testVector[1]==500);
+
+	vector<double> testVectorDbl = testObject.position();
+	assert(testVectorDbl[0]==12.5);
+	assert(testVectorDbl[1]==9.5);
+	assert(testVectorDbl[2]==8.75);
+}
+
+void CeilingCam::testTheta(CeilingCam testObject){
+	double e = 0.000001;
+	assert(testObject.findTheta(0,0) < e);
+	assert(testObject.findTheta(1,1)-(M_PI/4) < e);
+	assert(testObject.findTheta(-1,1)-(3 * M_PI/4) < e);
+	assert(testObject.findTheta(-1,-1)-(-3 * M_PI/4) < e);
+	assert(testObject.findTheta(1,-1)-(M_PI/-4) < e);
+}
+
+void CeilingCam::testCartesian(CeilingCam testObject){
+	double e = 0.0001;
+	/*
+	 * Test Conditions:
+	 * Default Position: (12.5, 9.5, 0.25)
+	 * Rotation: 90 degrees
+	 * Size: 1920 x 1080
+	 * Center: (500, 720)
+	 * Radius: 600
+	 */
+	//test directly under
+	vector<double> testVectorDbl = testObject.toCartesian(720,500);
+	assert(testVectorDbl[0] - 12.5 < e);
+	assert(testVectorDbl[1] - 9.5 < e);
+	assert(testVectorDbl[2] - 0.25 < e);
+
+	//Right
+	testVectorDbl = testObject.toCartesian(720+180,500);
+	assert(testVectorDbl[0] - 12.5 < e);
+	assert(testVectorDbl[1] - 5.16903 < e);
+	assert(testVectorDbl[2] - 0.25 < e);
+
+	//Up
+	testVectorDbl = testObject.toCartesian(720, 500+180);
+	assert(testVectorDbl[0] - 16.83097 < e);
+	assert(testVectorDbl[1] - 9.5 < e);
+	assert(testVectorDbl[2] - 0.25 < e);
+
+	//Angle
+	testVectorDbl = testObject.toCartesian(720-200, 500+342);
+	//phi 59.428023692530782324704925256661
+	//theta 30.318896200757337252069624378432
+	//distance 14.38877245751138506976412588597
+	//x 24.920807242208657984933758426808
+	//y 16.763629966203893558440794401642
+	assert(testVectorDbl[0] - 24.92080724 < e);
+	assert(testVectorDbl[1] - 16.76362996 < e);
+	assert(testVectorDbl[2] - 0.25 < e);
+
+	//Over
+	testVectorDbl = testObject.toCartesian(720+1000, 500);
+	//phi 89.985
+	//theta -90
+	//distance 32467.607648981713009944399854133
+	//x 12.5
+	//y -32458.107648981713009944399854133
+	assert(testVectorDbl[0] - 12.5 < e);
+	assert(testVectorDbl[1] + -32458.1076489817 < e);
+	assert(testVectorDbl[2] - 0.25 < e);
+
+}
+
 
 //HELPER FUNCTIONS	//////////////////////////////////////
 /*
@@ -241,5 +362,6 @@ double CeilingCam::findTheta( double x, double y){
 
 	// B. atan2 produces values from pi to -pi instead of just pi/2 to -pi/2
 	theta = atan2(y,x);
+	//cout << "Theta equals: " << theta << "\n";
 	return theta;
 }
